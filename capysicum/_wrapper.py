@@ -5,7 +5,11 @@ ffi = cffi.FFI()
 ffi.cdef('''
 typedef ... u_int;
 
-typedef struct cap_rights cap_rights_t;
+struct cap_rights {
+    ...;
+};
+
+typedef	struct cap_rights cap_rights_t;
 
 /* internal use, so that we can call __cap_rights_init */
 static const int _M_CAP_RIGHTS_VERSION;
@@ -120,6 +124,8 @@ cap_rights_contains(const cap_rights_t *big, const cap_rights_t *little);
 
 int
 cap_rights_limit(int fd, const cap_rights_t *rights);
+
+int printf(const char * restrict fmt, ...);
 ''')
 
 lib = ffi.verify('''
@@ -130,13 +136,52 @@ static const int _M_CAP_RIGHTS_VERSION = CAP_RIGHTS_VERSION;
 ''', ext_package='capysicum')
 
 
+RIGHTS = {name: ffi.cast('unsigned long long', getattr(lib, name))
+          for name in dir(lib) if name.startswith('CAP_')}
+
+
 def new_cap_rights():
     return ffi.new('cap_rights_t *')
 
 
-def cap_rights_init(*rights):
-    return lib.__cap_rights_init(lib._M_CAP_RIGHTS_VERSION, *rights)
+def _terminating_null(f, *args):
+    args += (ffi.NULL,)
+    return f(*args)
+
+
+def cap_rights_init(cap_rights, *rights):
+    return _terminating_null(
+        lib.__cap_rights_init,
+        lib._M_CAP_RIGHTS_VERSION,
+        cap_rights, *rights)
+
+
+def cap_rights_set(cap_rights, *rights):
+    return _terminating_null(lib.__cap_rights_set,
+                             cap_rights, *rights)
+
+
+def cap_rights_clear(cap_rights, *rights):
+    return _terminating_null(lib.__cap_rights_clear,
+                             cap_rights, *rights)
 
 
 def cap_rights_is_set(cap_rights, *rights):
-    return lib.__cap_rights_is_set(cap_rights, *rights)
+    return _terminating_null(lib.__cap_rights_is_set,
+                             cap_rights, *rights)
+
+
+def cap_rights_is_valid(cap_rights):
+    return lib.cap_rights_is_valid(cap_rights)
+
+
+def cap_rights_merge(dst, src):
+    return lib.cap_rights_merge(dst, src)
+
+
+def cap_rights_is_remove(dst, src):
+    return lib.cap_rights_remove(dst, src)
+
+
+def cap_rights_contains(big, little):
+    return lib.cap_rights_contains(big, little)
