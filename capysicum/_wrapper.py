@@ -5,8 +5,12 @@ ffi = cffi.FFI()
 ffi.cdef('''
 typedef ... u_int;
 
-struct cap_rights {
+/*struct cap_rights {
     ...;
+};*/
+
+struct cap_rights {
+uint64_t cr_rights[2];
 };
 
 typedef	struct cap_rights cap_rights_t;
@@ -104,28 +108,12 @@ __cap_rights_init(int version, cap_rights_t *rights, ...);
 cap_rights_t *
 __cap_rights_set(cap_rights_t *rights, ...);
 
-cap_rights_t *
-__cap_rights_clear(cap_rights_t *rights, ...);
+cap_rights_t
+*__cap_rights_clear(cap_rights_t *rights, ...);
 
 bool
 __cap_rights_is_set(const cap_rights_t *rights, ...);
 
-bool
-cap_rights_is_valid(const cap_rights_t *rights);
-
-cap_rights_t *
-cap_rights_merge(cap_rights_t *dst, const cap_rights_t *src);
-
-cap_rights_t *
-cap_rights_remove(cap_rights_t *dst, const cap_rights_t *src);
-
-bool
-cap_rights_contains(const cap_rights_t *big, const cap_rights_t *little);
-
-int
-cap_rights_limit(int fd, const cap_rights_t *rights);
-
-int printf(const char * restrict fmt, ...);
 ''')
 
 lib = ffi.verify('''
@@ -136,52 +124,41 @@ static const int _M_CAP_RIGHTS_VERSION = CAP_RIGHTS_VERSION;
 ''', ext_package='capysicum')
 
 
-RIGHTS = {name: ffi.cast('unsigned long long', getattr(lib, name))
+RIGHTS = {name: getattr(lib, name)
           for name in dir(lib) if name.startswith('CAP_')}
 
 
+def _dump_rights(cap_rights):
+    for name, thing in RIGHTS.items():
+        print name, cap_rights_is_set(cap_rights, thing)
+
+
 def new_cap_rights():
-    return ffi.new('cap_rights_t *')
+    return ffi.new('cap_rights_t*')
 
 
-def _terminating_null(f, *args):
-    args += (ffi.NULL,)
-    return f(*args)
+def prep_rights(rights):
+    args = [ffi.cast('unsigned long long', right) for right in rights]
+    args.append(ffi.NULL)
+    return args
 
 
 def cap_rights_init(cap_rights, *rights):
-    return _terminating_null(
-        lib.__cap_rights_init,
-        lib._M_CAP_RIGHTS_VERSION,
-        cap_rights, *rights)
+    lib.__cap_rights_init(lib._M_CAP_RIGHTS_VERSION,
+                          cap_rights,
+                          *prep_rights(rights))
+    return cap_rights
 
 
 def cap_rights_set(cap_rights, *rights):
-    return _terminating_null(lib.__cap_rights_set,
-                             cap_rights, *rights)
+    lib.__cap_rights_set(cap_rights, *prep_rights(rights))
+    return cap_rights
 
 
 def cap_rights_clear(cap_rights, *rights):
-    return _terminating_null(lib.__cap_rights_clear,
-                             cap_rights, *rights)
+    lib.__cap_rights_clear(cap_rights, *prep_rights(rights))
+    return cap_rights
 
 
 def cap_rights_is_set(cap_rights, *rights):
-    return _terminating_null(lib.__cap_rights_is_set,
-                             cap_rights, *rights)
-
-
-def cap_rights_is_valid(cap_rights):
-    return lib.cap_rights_is_valid(cap_rights)
-
-
-def cap_rights_merge(dst, src):
-    return lib.cap_rights_merge(dst, src)
-
-
-def cap_rights_is_remove(dst, src):
-    return lib.cap_rights_remove(dst, src)
-
-
-def cap_rights_contains(big, little):
-    return lib.cap_rights_contains(big, little)
+    return lib.__cap_rights_is_set(cap_rights, *prep_rights(rights))
