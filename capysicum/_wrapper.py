@@ -1,16 +1,13 @@
 import cffi
+import os
 
 ffi = cffi.FFI()
 
 ffi.cdef('''
-typedef ... u_int;
-
-/*struct cap_rights {
-    ...;
-};*/
+typedef unsigned int u_int;
 
 struct cap_rights {
-uint64_t cr_rights[2];
+    ...;
 };
 
 typedef	struct cap_rights cap_rights_t;
@@ -114,9 +111,28 @@ cap_rights_t
 bool
 __cap_rights_is_set(const cap_rights_t *rights, ...);
 
+bool
+cap_rights_is_valid(const cap_rights_t *rights);
+
+cap_rights_t *
+cap_rights_merge(cap_rights_t *dst, const cap_rights_t *src);
+
+cap_rights_t *
+cap_rights_remove(cap_rights_t *dst, const cap_rights_t *src);
+
+bool
+cap_rights_contains(const cap_rights_t *big, const cap_rights_t *little);
+
+int
+cap_rights_limit(int fd, const cap_rights_t *rights);
+
+int
+cap_rights_get(int fd, cap_rights_t *rights);
+
 ''')
 
 lib = ffi.verify('''
+#include <sys/types.h>
 #include <sys/capability.h>
 
 static const int _M_CAP_RIGHTS_VERSION = CAP_RIGHTS_VERSION;
@@ -124,13 +140,26 @@ static const int _M_CAP_RIGHTS_VERSION = CAP_RIGHTS_VERSION;
 ''', ext_package='capysicum')
 
 
-RIGHTS = {name: getattr(lib, name)
-          for name in dir(lib) if name.startswith('CAP_')}
+class CapysicumError(Exception):
+
+    def __init__(self, msg=None, errno=None):
+        if msg is None and errno is not None:
+            msg = '[Errno {}] {}'.format(errno,
+                                         os.strerror(errno))
+        super(CapysicumError, self).__init__(msg)
+        self.errno = errno
 
 
-def _dump_rights(cap_rights):
-    for name, thing in RIGHTS.items():
-        print name, cap_rights_is_set(cap_rights, thing)
+def cap_getmode():
+    in_cap_mode = ffi.new('unsigned int *', 0)
+    if lib.cap_getmode(in_cap_mode) < 0:
+        raise CapysicumError(ffi.errno)
+    return bool(in_cap_mode[0])
+
+
+def cap_enter():
+    if lib.cap_enter() < 0:
+        raise CapysicumError(ffi.errno)
 
 
 def new_cap_rights():
@@ -162,3 +191,31 @@ def cap_rights_clear(cap_rights, *rights):
 
 def cap_rights_is_set(cap_rights, *rights):
     return lib.__cap_rights_is_set(cap_rights, *prep_rights(rights))
+
+
+def cap_rights_is_valid(cap_rights):
+    return bool(lib.cap_rights_is_valid(cap_rights))
+
+
+def cap_rights_merge(dst, src):
+    lib.cap_rights_merge(dst, src)
+    return dst
+
+
+def cap_rights_remove(dst, src):
+    lib.cap_rights_remove(dst, src)
+    return dst
+
+
+def cap_rights_contains(big, little):
+    return bool(lib.cap_rights_contains(big, little))
+
+
+def cap_rights_limit(fd, rights):
+    if lib.cap_rights_limit(fd, rights) < 0:
+        raise CapysicumError(errno=ffi.errno)
+
+
+def cap_rights_get(fd, rights):
+    if lib.cap_rights_get(fd, rights) < 0:
+        raise CapysicumError(errno=ffi.errno)
