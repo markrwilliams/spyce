@@ -171,25 +171,25 @@ def _errno_to_str(errno):
                                      os.strerror(errno))
 
 
-class CapysicumError(Exception):
+class SpyceError(Exception):
 
     def __init__(self, msg=None, errno=None):
         if msg is None and errno is not None:
             msg = _errno_to_str(errno)
-        super(CapysicumError, self).__init__(msg)
+        super(SpyceError, self).__init__(msg)
         self.errno = errno
 
 
 def cap_getmode():
     in_cap_mode = ffi.new('unsigned int *', 0)
     if lib.cap_getmode(in_cap_mode) < 0:
-        raise CapysicumError(ffi.errno)
+        raise SpyceError(ffi.errno)
     return bool(in_cap_mode[0])
 
 
 def cap_enter():                # pragma: no cover
     if lib.cap_enter() < 0:
-        raise CapysicumError(ffi.errno)
+        raise SpyceError(ffi.errno)
 
 
 def new_cap_rights():
@@ -243,9 +243,9 @@ def cap_rights_contains(big, little):
 
 def cap_rights_limit(fd, rights):
     if lib.cap_rights_limit(fd, rights) < 0:
-        raise CapysicumError(errno=ffi.errno)
+        raise SpyceError(errno=ffi.errno)
 
 
 def cap_rights_get(fd, rights):
     if lib.cap_rights_get(fd, rights) < 0:
-        raise CapysicumError(errno=ffi.errno)
+        raise SpyceError(errno=ffi.errno)

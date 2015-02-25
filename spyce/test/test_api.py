@@ -27,6 +27,17 @@ class TestInternalFunctions(unittest.TestCase):
         self.assertEqual(A._rightsFromCapRights(self.cap_rights),
                          {A.CAP_ACCEPT})
 
+    def test_fdFor(self):
+        self.assertEqual(A.fdFor(1), 1)
+
+        with tempfile.TemporaryFile() as f:
+            self.assertEqual(A.fdFor(f), f.fileno())
+
+        no_fileno = StringIO.StringIO("nope!")
+
+        with self.assertRaises(A.SpyceError):
+            A.fdFor(no_fileno)
+
 
 class TestRight(unittest.TestCase):
 
@@ -61,7 +72,7 @@ class TestRights(unittest.TestCase):
                          normalizeRights(new_rights))
 
     def test_init_with_bad_rights(self):
-        with self.assertRaises(A.CapysicumError):
+        with self.assertRaises(A.SpyceError):
             A.Rights([1])
 
     def test_add(self):
@@ -70,7 +81,7 @@ class TestRights(unittest.TestCase):
 
         lenBefore = len(self.rights)
 
-        with self.assertRaises(A.CapysicumError):
+        with self.assertRaises(A.SpyceError):
             self.rights.add(1)
 
         self.assertNotIn(1, self.rights)
@@ -83,7 +94,7 @@ class TestRights(unittest.TestCase):
 
         lenBefore = len(self.rights)
 
-        with self.assertRaises(A.CapysicumError):
+        with self.assertRaises(A.SpyceError):
             self.rights.discard(1)
 
         self.assertEqual(lenBefore, len(self.rights))
@@ -169,11 +180,6 @@ class TestRights(unittest.TestCase):
             self.verifyErrno(cm)
 
             self.assertEquals(self.rights, A.getFileRights(f))
-
-        no_fileno = StringIO.StringIO("nope!")
-
-        with self.assertRaises(A.CapysicumError):
-            self.rights.limitFile(no_fileno)
 
     def test_limitSocketPair(self):
         data = 'ok'

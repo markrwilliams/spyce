@@ -7,7 +7,7 @@ from ._wrapper import (lib,
                        cap_rights_merge, cap_rights_remove,
                        cap_rights_contains, cap_rights_is_valid,
                        cap_rights_limit,
-                       CapysicumError)
+                       SpyceError)
 
 
 class Right(namedtuple('Right', 'name value')):
@@ -19,7 +19,7 @@ class Right(namedtuple('Right', 'name value')):
         raise NotImplementedError
 
     def __repr__(self):
-        return 'Right(%s)' % self.name
+        return 'Right({})'.format(self.name)
 
 
 RIGHTS = set()
@@ -118,6 +118,15 @@ __all__ = ['Right', 'Rights', 'getFileRights', 'inCapabilityMode',
            'enterCapabilityMode'] + [r.name for r in RIGHTS]
 
 
+def fdFor(thing):
+    if isinstance(thing, int):
+        return thing
+    elif callable(getattr(thing, 'fileno', None)):
+        return thing.fileno()
+    raise SpyceError("{!r} lacks a fileno", thing)
+
+
+
 def _ensureValid(cap_rights):
     if not cap_rights_is_valid(cap_rights):
         raise RuntimeError('Invalid underlying cap_rights object!  '
@@ -143,7 +152,7 @@ class Rights(MutableSet):
         rights = set(iterable)
         bad = rights - RIGHTS
         if bad:
-            raise CapysicumError('Invalid rights: {}'.format(tuple(bad)))
+            raise SpyceError('Invalid rights: {}'.format(tuple(bad)))
 
         self._cap_rights = new_cap_rights()
         cap_rights_init(self._cap_rights, *map(int, rights))
@@ -161,7 +170,7 @@ class Rights(MutableSet):
 
     def add(self, right):
         if right not in RIGHTS:
-            raise CapysicumError('Invalid right {}'.format(repr(right)))
+            raise SpyceError('Invalid right {!r}'.format(right))
 
         _ensureValid(self._cap_rights)
         cap_rights_set(self._cap_rights, int(right))
@@ -169,7 +178,7 @@ class Rights(MutableSet):
 
     def discard(self, right):
         if right not in RIGHTS:
-            raise CapysicumError('Invalid right {}'.format(repr(right)))
+            raise SpyceError('Invalid right {!r}'.format(right))
 
         _ensureValid(self._cap_rights)
         cap_rights_clear(self._cap_rights, int(right))
@@ -237,18 +246,16 @@ class Rights(MutableSet):
 
     def __repr__(self):
         cn = self.__class__.__name__
-        rights = ', '.join(repr(r) for r in self._rights)
+        rights = ', '.join('{!r}'.format(r) for r in self._rights)
         return '{}([{}])'.format(cn, rights)
 
     def limitFile(self, fileobj):
-        if not hasattr(fileobj, 'fileno'):
-            raise CapysicumError('argument must have fileno')
-        cap_rights_limit(fileobj.fileno(), self._cap_rights)
+        cap_rights_limit(fdFor(fileobj), self._cap_rights)
 
 
 def getFileRights(fileobj):
     cap_rights = new_cap_rights()
-    cap_rights_get(fileobj.fileno(), cap_rights)
+    cap_rights_get(fdFor(fileobj), cap_rights)
     return Rights._from_cap_rights(cap_rights)
 
 

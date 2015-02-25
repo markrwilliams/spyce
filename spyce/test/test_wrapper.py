@@ -145,7 +145,7 @@ class ErrnoMixin(unittest.TestCase):
 
     def _test_errno(self, args_errnos, func):
         for args, err in args_errnos:
-            with self.assertRaises(W.CapysicumError) as caught_ce:
+            with self.assertRaises(W.SpyceError) as caught_ce:
                 W.cap_rights_limit(*args)
 
             self.assertTrue(caught_ce.exception.errno, err)
