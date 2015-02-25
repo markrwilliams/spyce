@@ -151,7 +151,7 @@ static const int _M_EOWNERDEAD = EOWNERDEAD;
 
 static const int _M_CAP_RIGHTS_VERSION = CAP_RIGHTS_VERSION;
 
-''', ext_package='capysicum')
+''', ext_package='spyce')
 
 ENOTCAPABLE = lib._M_ENOTCAPABLE
 ECAPMODE = lib._M_ECAPMODE

@@ -3,7 +3,7 @@ import errno
 import tempfile
 import unittest
 
-from capysicum import _wrapper as W
+from spyce import _wrapper as W
 
 
 NAMES = {W.lib.CAP_WRITE: 'CAP_WRITE',
@@ -155,7 +155,7 @@ class TestLimitAndGetd(ErrnoMixin, unittest.TestCase):
 
     def setUp(self):
         self.f = tempfile.TemporaryFile('w+',
-                                        prefix="capysicum_TestLimitFD_tmp")
+                                        prefix="spyce_TestLimitFD_tmp")
 
     def tearDown(self):
         self.f.close()

@@ -3,8 +3,8 @@ import StringIO
 import tempfile
 import socket
 
-import capysicum._wrapper as W
-import capysicum._api as A
+import spyce._wrapper as W
+import spyce._api as A
 
 
 def normalizeRights(rights):
