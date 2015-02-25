@@ -2,8 +2,10 @@ from collections import namedtuple, MutableSet
 from ._wrapper import (lib, new_cap_rights, cap_rights_init,
                        cap_rights_set, cap_rights_get,
                        cap_rights_clear, cap_rights_is_set,
-                       cap_rights_limit)
-
+                       cap_rights_merge, cap_rights_remove,
+                       cap_rights_contains, cap_rights_is_valid,
+                       cap_rights_limit,
+                       CapysicumError)
 
 class Right(namedtuple('Right', 'name value')):
 
@@ -109,11 +111,21 @@ CAP_WRITE = _add_right(Right('CAP_WRITE', lib.CAP_WRITE))
 RIGHTS = frozenset(RIGHTS)
 
 
-class CapabilitiesError(Exception):
+__all__ = ['Right', 'Rights'] + [r.name for r in RIGHTS]
 
-    def __init__(self, message, errno=None):
-        super(CapabilitiesError, self).__init__(message)
-        self.errno = errno
+
+def _ensureValid(cap_rights):
+    if not cap_rights_is_valid(cap_rights):
+        raise RuntimeError('Invalid underlying cap_rights object!  '
+                           'Please file a bug')
+
+
+def _rightsFromCapRights(cap_rights):
+    return {right for right in RIGHTS
+            if cap_rights_is_set(cap_rights, int(right))}
+
+
+_NO_CAP_RIGHTS = object()
 
 
 class Rights(MutableSet):
@@ -121,34 +133,67 @@ class Rights(MutableSet):
     _cap_rights = None
 
     def __init__(self, iterable):
+        if iterable is _NO_CAP_RIGHTS:
+            return
+
         rights = set(iterable)
         bad = rights - RIGHTS
         if bad:
-            raise CapabilitiesError('Invalid rights: {}'.format(tuple(bad)))
+            raise CapysicumError('Invalid rights: {}'.format(tuple(bad)))
 
         self._cap_rights = new_cap_rights()
         cap_rights_init(self._cap_rights, *map(int, rights))
+        _ensureValid(self._cap_rights)
+
         self._rights = rights
 
     @classmethod
     def _from_cap_rights(cls, cap_rights):
-        rights = cls({right for right in RIGHTS
-                      if cap_rights_is_set(cap_rights, right.value)})
+        _ensureValid(cap_rights)
+        rights = cls(_NO_CAP_RIGHTS)
+        rights._rights = _rightsFromCapRights(cap_rights)
+        rights._cap_rights = cap_rights
         return rights
 
     def add(self, right):
         if right not in RIGHTS:
-            raise CapabilitiesError('Invalid right {}'.format(repr(right)))
+            raise CapysicumError('Invalid right {}'.format(repr(right)))
 
+        _ensureValid(self._cap_rights)
         cap_rights_set(self._cap_rights, int(right))
-        self.rights.add(right)
+        self._rights.add(right)
 
     def discard(self, right):
         if right not in RIGHTS:
-            raise CapabilitiesError('Invalid right {}'.format(repr(right)))
+            raise CapysicumError('Invalid right {}'.format(repr(right)))
 
+        _ensureValid(self._cap_rights)
         cap_rights_clear(self._cap_rights, int(right))
-        self.rights.discard(right)
+        self._rights.discard(right)
+
+    def __ior__(self, other):
+        cls = self.__class__
+        if not isinstance(other, cls):
+            return super(cls, self).__ior__(other)
+
+        self_cap_rights = self._cap_rights
+        cap_rights_merge(self_cap_rights, other._cap_rights)
+        _ensureValid(self_cap_rights)
+
+        self._rights |= other._rights
+        return self
+
+    def __isub__(self, other):
+        cls = self.__class__
+        if not isinstance(other, cls):
+            return super(cls, self).__isub__(other)
+
+        self_cap_rights = self._cap_rights
+        cap_rights_remove(self_cap_rights, other._cap_rights)
+        _ensureValid(self_cap_rights)
+
+        self._rights -= other._rights
+        return self
 
     def __iter__(self):
         return iter(self._rights)
@@ -156,23 +201,44 @@ class Rights(MutableSet):
     def __contains__(self, value):
         return value in self._rights
 
+    def isdisjoint(self, other):
+        cls = self.__class__
+        if not isinstance(other, cls):
+            return super(cls, self).isdisjoint(other)
+
+        if not other:
+            return True
+
+        _ensureValid(other._cap_rights)
+        return (self._rights.isdisjoint(other)
+                and not cap_rights_contains(self._cap_rights,
+                                            other._cap_rights))
+
     def __len__(self):
         return len(self._rights)
 
     def __le__(self, other):
-        return self._rights.__le__(other._rights)
+        cls = self.__class__
+        if not isinstance(other, cls):
+            super(cls, self).__le__(other)
+
+        return self._rights <= getattr(other, '_rights', other)
 
     def __ge__(self, other):
-        return self._rights.__le__(other._rights)
+        cls = self.__class__
+        if not isinstance(other, cls):
+            super(cls, self).__ge__(other)
+
+        return self._rights >= getattr(other, '_rights', other)
 
     def __repr__(self):
         cn = self.__class__.__name__
         rights = ', '.join(repr(r) for r in self._rights)
-        return '{}({})'.format(cn, rights)
+        return '{}([{}])'.format(cn, rights)
 
     def limitFile(self, fileobj):
         if not hasattr(fileobj, 'fileno'):
-            raise CapabilitiesError('argument must have fileno')
+            raise CapysicumError('argument must have fileno')
         cap_rights_limit(fileobj.fileno(), self._cap_rights)
 
 

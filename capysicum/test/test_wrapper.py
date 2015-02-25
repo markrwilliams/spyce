@@ -5,6 +5,7 @@ import unittest
 
 from capysicum import _wrapper as W
 
+
 NAMES = {W.lib.CAP_WRITE: 'CAP_WRITE',
          W.lib.CAP_IOCTL: 'CAP_IOCTL',
          W.lib.CAP_LOOKUP: 'CAP_LOOKUP',

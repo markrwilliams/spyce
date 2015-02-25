@@ -1,5 +1,7 @@
-import cffi
+import errno
 import os
+
+import cffi
 
 ffi = cffi.FFI()
 
@@ -11,6 +13,12 @@ struct cap_rights {
 };
 
 typedef	struct cap_rights cap_rights_t;
+
+
+static const int _M_ENOTCAPABLE;
+static const int _M_ECAPMODE;
+static const int _M_ENOTRECOVERABLE;
+static const int _M_EOWNERDEAD;
 
 /* internal use, so that we can call __cap_rights_init */
 static const int _M_CAP_RIGHTS_VERSION;
@@ -133,19 +141,41 @@ cap_rights_get(int fd, cap_rights_t *rights);
 
 lib = ffi.verify('''
 #include <sys/types.h>
+#include <sys/errno.h>
 #include <sys/capability.h>
+
+static const int _M_ENOTCAPABLE = ENOTCAPABLE;
+static const int _M_ECAPMODE = ECAPMODE;
+static const int _M_ENOTRECOVERABLE = ENOTRECOVERABLE;
+static const int _M_EOWNERDEAD = EOWNERDEAD;
 
 static const int _M_CAP_RIGHTS_VERSION = CAP_RIGHTS_VERSION;
 
 ''', ext_package='capysicum')
+
+ENOTCAPABLE = lib._M_ENOTCAPABLE
+ECAPMODE = lib._M_ECAPMODE
+ENOTRECOVERABLE = lib._M_ENOTRECOVERABLE
+EOWNERDEAD = lib._M_EOWNERDEAD
+
+extended_errorcode = errno.errorcode.copy()
+extended_errorcode[ENOTCAPABLE] = 'ENOTCAPABLE'
+extended_errorcode[ECAPMODE] = 'ECAPMODE'
+extended_errorcode[ENOTRECOVERABLE] = 'ENOTRECOVERABLE'
+extended_errorcode[EOWNERDEAD] = 'EOWNERDEAD'
+
+
+def _errno_to_str(errno):
+    return '[Errno {} ()] {}'.format(errno,
+                                     extended_errorcode[errno],
+                                     os.strerror(errno))
 
 
 class CapysicumError(Exception):
 
     def __init__(self, msg=None, errno=None):
         if msg is None and errno is not None:
-            msg = '[Errno {}] {}'.format(errno,
-                                         os.strerror(errno))
+            msg = _errno_to_str(errno)
         super(CapysicumError, self).__init__(msg)
         self.errno = errno
 
@@ -157,7 +187,7 @@ def cap_getmode():
     return bool(in_cap_mode[0])
 
 
-def cap_enter():
+def cap_enter():                # pragma: no cover
     if lib.cap_enter() < 0:
         raise CapysicumError(ffi.errno)
 
