@@ -1,11 +1,14 @@
 from collections import namedtuple, MutableSet
-from ._wrapper import (lib, new_cap_rights, cap_rights_init,
+from ._wrapper import (lib,
+                       cap_enter, cap_getmode,
+                       new_cap_rights, cap_rights_init,
                        cap_rights_set, cap_rights_get,
                        cap_rights_clear, cap_rights_is_set,
                        cap_rights_merge, cap_rights_remove,
                        cap_rights_contains, cap_rights_is_valid,
                        cap_rights_limit,
                        CapysicumError)
+
 
 class Right(namedtuple('Right', 'name value')):
 
@@ -111,7 +114,8 @@ CAP_WRITE = _add_right(Right('CAP_WRITE', lib.CAP_WRITE))
 RIGHTS = frozenset(RIGHTS)
 
 
-__all__ = ['Right', 'Rights'] + [r.name for r in RIGHTS]
+__all__ = ['Right', 'Rights', 'getFileRights', 'inCapabilityMode',
+           'enterCapabilityMode'] + [r.name for r in RIGHTS]
 
 
 def _ensureValid(cap_rights):
@@ -246,3 +250,12 @@ def getFileRights(fileobj):
     cap_rights = new_cap_rights()
     cap_rights_get(fileobj.fileno(), cap_rights)
     return Rights._from_cap_rights(cap_rights)
+
+
+def inCapabilityMode():
+    return cap_getmode()
+
+
+def enterCapabilityMode():
+    # TODO: close fds, set resource limits, what else?
+    cap_enter()
