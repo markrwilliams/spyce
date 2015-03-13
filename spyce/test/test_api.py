@@ -2,6 +2,7 @@ import unittest
 import StringIO
 import tempfile
 import socket
+import fcntl
 
 import spyce._api as A
 
@@ -102,12 +103,16 @@ class TestRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
         self.assertEqual(lenBefore, len(self.rights))
 
     def test_contains(self):
-        self.assertTrue(A.CAP_READ in self.rights)
+        self.assertIn(A.CAP_READ, self.rights)
+        self.assertNotIn(A.CAP_WRITE, self.rights)
 
     def test_len(self):
         self.assertEqual(len(self.rights), 1)
         self.rights.add(A.CAP_WRITE)
         self.assertEqual(len(self.rights), 2)
+
+    def test_iter(self):
+        self.assertEqual(list(self.rights), [A.CAP_READ])
 
     def test_le(self):
         self.assertLess(A.Rights(()), self.rights)
@@ -177,6 +182,10 @@ class TestRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
         self.assertEquals(self.rights, A.getFileRights(self.f))
 
+        self.rights.add(A.CAP_WRITE)
+        with self.assertRaisesWithErrno(A.SpyceError, A.ENOTCAPABLE):
+            self.rights.limitFile(self.f)
+
     def test_limitSocketPair(self):
         data = 'ok'
 
@@ -195,3 +204,63 @@ class TestRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
         self.socketSideA.sendall(data)
         self.assertEqual(data, self.socketSideB.recv(len(data)))
+
+
+class TestFcntlRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
+
+    def setUp(self):
+        super(TestFcntlRights, self).setUp()
+        self.fcntlRights = A.FcntlRights([A.CAP_FCNTL_GETFL])
+
+    def test_init_with_bad_fcntl_rights(self):
+        with self.assertRaises(A.SpyceError):
+            A.FcntlRights([1])
+
+    def test_add(self):
+        self.fcntlRights.add(A.CAP_FCNTL_SETFL)
+        self.assertEqual(self.fcntlRights, {A.CAP_FCNTL_GETFL,
+                                            A.CAP_FCNTL_SETFL})
+
+        lenBefore = len(self.fcntlRights)
+
+        with self.assertRaises(A.SpyceError):
+            self.fcntlRights.add(1)
+
+        self.assertNotIn(1, self.fcntlRights)
+        self.assertEqual(lenBefore, len(self.fcntlRights))
+
+    def test_discard(self):
+        self.fcntlRights.add(A.CAP_FCNTL_SETFL)
+        self.fcntlRights.discard(A.CAP_FCNTL_GETFL)
+        self.assertEqual(self.fcntlRights, {A.CAP_FCNTL_SETFL})
+
+        lenBefore = len(self.fcntlRights)
+
+        with self.assertRaises(A.SpyceError):
+            self.fcntlRights.discard(1)
+
+        self.assertEqual(lenBefore, len(self.fcntlRights))
+
+    def test_contains(self):
+        self.assertIn(A.CAP_FCNTL_GETFL, self.fcntlRights)
+        self.assertNotIn(A.CAP_FCNTL_SETFL, self.fcntlRights)
+
+    def test_len(self):
+        self.assertEqual(len(self.fcntlRights), 1)
+        self.fcntlRights.add(A.CAP_FCNTL_GETOWN)
+        self.assertEqual(len(self.fcntlRights), 2)
+
+    def test_iter(self):
+        self.assertEqual(list(self.fcntlRights), [A.CAP_FCNTL_GETFL])
+
+    def test_limitFile(self):
+        self.fcntlRights.limitFile(self.f)
+
+        with self.assertRaisesWithErrno(IOError, A.ENOTCAPABLE):
+            fcntl.fcntl(self.f, fcntl.F_SETFL, 0)
+
+        self.assertEqual(A.getFileFcntlRights(self.f), self.fcntlRights)
+
+        self.fcntlRights.add(A.CAP_FCNTL_SETFL)
+        with self.assertRaisesWithErrno(A.SpyceError, A.ENOTCAPABLE):
+            self.fcntlRights.limitFile(self.f)

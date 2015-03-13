@@ -1,3 +1,4 @@
+import operator
 from collections import namedtuple, MutableSet
 from ._wrapper import (lib,
                        cap_enter, cap_getmode,
@@ -7,11 +8,13 @@ from ._wrapper import (lib,
                        cap_rights_merge, cap_rights_remove,
                        cap_rights_contains, cap_rights_is_valid,
                        cap_rights_limit,
+                       cap_fcntls_get, cap_fcntls_limit,
                        SpyceError,
                        ENOTCAPABLE,
                        ECAPMODE,
                        ENOTRECOVERABLE,
                        EOWNERDEAD)
+from ._compat import reduce
 
 
 class Right(namedtuple('Right', 'name value')):
@@ -23,14 +26,15 @@ class Right(namedtuple('Right', 'name value')):
         raise NotImplementedError
 
     def __repr__(self):
-        return 'Right({})'.format(self.name)
+        cn = self.__class__.__name__
+        return '{}({})'.format(cn, self.name)
 
 
 RIGHTS = set()
 
 
-def _add_right(r):
-    RIGHTS.add(r)
+def _add_right(r, s=RIGHTS):
+    s.add(r)
     return r
 
 
@@ -256,10 +260,79 @@ class Rights(MutableSet):
         cap_rights_limit(fdFor(fileobj), self._cap_rights)
 
 
+class FcntlRight(Right):
+    pass
+
+
+FCNTL_RIGHTS = set()
+
+CAP_FCNTL_GETFL = _add_right(FcntlRight('CAP_FCNTL_GETFL',
+                                        lib.CAP_FCNTL_GETFL),
+                             FCNTL_RIGHTS)
+CAP_FCNTL_SETFL = _add_right(FcntlRight('CAP_FCNTL_SETFL',
+                                        lib.CAP_FCNTL_SETFL),
+                             FCNTL_RIGHTS)
+CAP_FCNTL_GETOWN = _add_right(FcntlRight('CAP_FCNTL_GETOWN',
+                                         lib.CAP_FCNTL_GETOWN),
+                              FCNTL_RIGHTS)
+CAP_FCNTL_SETOWN = _add_right(FcntlRight('CAP_FCNTL_SETOWN',
+                                         lib.CAP_FCNTL_SETOWN),
+                              FCNTL_RIGHTS)
+
+
+FCNTL_RIGHTS = frozenset(FCNTL_RIGHTS)
+
+
+class FcntlRights(MutableSet):
+
+    def __init__(self, iterable):
+        rights = set(iterable)
+        bad = rights - FCNTL_RIGHTS
+        if bad:
+            raise SpyceError('Invalid fcntl rights: {}'.format(tuple(bad)))
+
+        self._rights = rights
+
+    @classmethod
+    def _from_intRights(cls, intRights):
+        return cls(right for right in FCNTL_RIGHTS if intRights & int(right))
+
+    def add(self, right):
+        if right not in FCNTL_RIGHTS:
+            raise SpyceError('Invalid fcntl right {!r}'.format(right))
+        self._rights.add(right)
+
+    def discard(self, right):
+        if right not in FCNTL_RIGHTS:
+            raise SpyceError('Invalid fcntl right {!r}'.format(right))
+        self._rights.discard(right)
+
+    def __contains__(self, value):
+        return value in self._rights
+
+    def __iter__(self):
+        return iter(self._rights)
+
+    def __len__(self):
+        return len(self._rights)
+
+    def limitFile(self, fileobj):
+        fd = fdFor(fileobj)
+        rights = reduce(operator.or_, map(int, self._rights))
+        cap_fcntls_limit(fd, rights)
+
+
 def getFileRights(fileobj):
+    fd = fdFor(fileobj)
     cap_rights = new_cap_rights()
-    cap_rights_get(fdFor(fileobj), cap_rights)
+    cap_rights_get(fd, cap_rights)
     return Rights._from_cap_rights(cap_rights)
+
+
+def getFileFcntlRights(fileobj):
+    fd = fdFor(fileobj)
+    intRights = cap_fcntls_get(fd)
+    return FcntlRights._from_intRights(intRights)
 
 
 def inCapabilityMode():
