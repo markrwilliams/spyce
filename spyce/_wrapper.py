@@ -137,12 +137,32 @@ cap_rights_limit(int fd, const cap_rights_t *rights);
 int
 cap_rights_get(int fd, cap_rights_t *rights);
 
+static const int CAP_FCNTL_GETFL;
+static const int CAP_FCNTL_SETFL;
+static const int CAP_FCNTL_GETOWN;
+static const int CAP_FCNTL_SETOWN;
+
+int
+cap_fcntls_get(int fd, uint32_t *fcntlrights);
+
+int
+cap_fcntls_limit(int fd, uint32_t fcntlights);
+
+static const long CAP_IOCTLS_ALL;
+static const long FIOCLEX;
+
+int
+cap_ioctls_limit(int fd, const unsigned long *cmds, size_t cmds);
+
+ssize_t
+cap_ioctls_get(int fd, unsigned long *cmds, size_t maxcmds);
 ''')
 
 lib = ffi.verify('''
 #include <sys/types.h>
 #include <sys/errno.h>
 #include <sys/capability.h>
+#include <sys/ioctl.h>
 
 static const int _M_ENOTCAPABLE = ENOTCAPABLE;
 static const int _M_ECAPMODE = ECAPMODE;
@@ -164,6 +184,8 @@ extended_errorcode[ECAPMODE] = 'ECAPMODE'
 extended_errorcode[ENOTRECOVERABLE] = 'ENOTRECOVERABLE'
 extended_errorcode[EOWNERDEAD] = 'EOWNERDEAD'
 
+MAX_IOCTL_CMDS = 256
+
 
 def _errno_to_str(errno):
     return '[Errno {} ()] {}'.format(errno,
@@ -182,7 +204,7 @@ class SpyceError(Exception):
 
 def cap_getmode():
     in_cap_mode = ffi.new('unsigned int *', 0)
-    if lib.cap_getmode(in_cap_mode) < 0:
+    if lib.cap_getmode(in_cap_mode) < 0:  # pragma: no cover
         raise SpyceError(ffi.errno)
     return bool(in_cap_mode[0])
 
@@ -248,4 +270,32 @@ def cap_rights_limit(fd, rights):
 
 def cap_rights_get(fd, rights):
     if lib.cap_rights_get(fd, rights) < 0:
+        raise SpyceError(errno=ffi.errno)
+
+
+def cap_fcntls_get(fd):
+    fcntlrights = ffi.new('uint32_t *')
+    if lib.cap_fcntls_get(fd, fcntlrights) < 0:
+        raise SpyceError(errno=ffi.errno)
+    return fcntlrights[0]
+
+
+def cap_fcntls_limit(fd, fcntlrights):
+    if lib.cap_fcntls_limit(fd, fcntlrights) < 0:
+        raise SpyceError(errno=ffi.errno)
+
+
+def new_ioctl_rights(*commands):
+    return ffi.new('unsigned long[]', commands)
+
+
+def cap_ioctls_get(fd, cmds):
+    total_commands = lib.cap_ioctls_get(fd, cmds, len(cmds))
+    if total_commands < 0:
+        raise SpyceError(errno=ffi.errno)
+    return total_commands
+
+
+def cap_ioctls_limit(fd, cmds):
+    if lib.cap_ioctls_limit(fd, cmds, len(cmds)) < 0:
         raise SpyceError(errno=ffi.errno)

@@ -1,7 +1,10 @@
+import contextlib
 import os
 import errno
 import tempfile
 import unittest
+import operator
+import fcntl
 
 from spyce import _wrapper as W
 
@@ -30,7 +33,17 @@ class CapEnterTest(unittest.TestCase):
         os._exit(0)
 
 
-class SimpleRightsTests(unittest.TestCase):
+class ErrnoMixin(unittest.TestCase):
+
+    @contextlib.contextmanager
+    def assertRaisesWithErrno(self, exc, errno):
+        with self.assertRaises(exc) as caught_ce:
+            yield
+
+        self.assertTrue(caught_ce.exception.errno, errno)
+
+
+class SimpleRightsTests(ErrnoMixin, unittest.TestCase):
     # NB: These functions never return failure; instead, they
     # terminate the program!
 
@@ -133,32 +146,103 @@ class SimpleRightsTests(unittest.TestCase):
         self.assertFalse(W.cap_rights_contains(little, big))
 
 
-class DependentRightsTestCase(unittest.TestCase):
-    DEPENDENT_RIGHTS = {W.lib.CAP_FCHMOD: W.lib.CAP_LOOKUP}
-
-
-class InclusliveRightsTestCase(unittest.TestCase):
-    INCLUSLIVE_RIGHTS = {W.lib.CAP_BINDAT: W.lib.CAP_LOOKUP}
-
-
-class ErrnoMixin(unittest.TestCase):
-
-    def _test_errno(self, args_errnos, func):
-        for args, err in args_errnos:
-            with self.assertRaises(W.SpyceError) as caught_ce:
-                W.cap_rights_limit(*args)
-
-            self.assertTrue(caught_ce.exception.errno, err)
-
-
-class TestLimitAndGetd(ErrnoMixin, unittest.TestCase):
+class TemporaryFDMixin(unittest.TestCase):
 
     def setUp(self):
+        cn = self.__class__.__name__
         self.f = tempfile.TemporaryFile('w+',
-                                        prefix="spyce_TestLimitFD_tmp")
+                                        prefix="spyce_test_{}_tmp".format(cn))
+        self.pipeReadFD, self.pipeWriteFD = self.pipeFDs = os.pipe()
 
     def tearDown(self):
         self.f.close()
+        for fd in self.pipeFDs:
+            try:
+                os.close(fd)
+            except OSError as e:
+                if e.errno != errno.EBADF:
+                    raise
+
+
+class TestFcntlLimits(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
+
+    def test_cap_fcntls_get(self):
+        allFcntlRights = reduce(operator.or_,
+                                [W.lib.CAP_FCNTL_GETFL,
+                                 W.lib.CAP_FCNTL_SETFL,
+                                 W.lib.CAP_FCNTL_GETOWN,
+                                 W.lib.CAP_FCNTL_SETOWN])
+        fileno = self.f.fileno()
+        self.assertEqual(W.cap_fcntls_get(fileno),
+                         allFcntlRights)
+
+        self.f.close()
+
+        with self.assertRaises(W.SpyceError):
+            W.cap_fcntls_get(fileno)
+
+    def test_cap_fcntls_limit(self):
+        W.cap_fcntls_limit(self.pipeReadFD,
+                           W.lib.CAP_FCNTL_GETFL | W.lib.CAP_FCNTL_GETOWN)
+
+        flags = fcntl.fcntl(self.pipeReadFD, fcntl.F_GETFL)
+        flags |= os.O_NONBLOCK
+
+        with self.assertRaisesWithErrno(IOError, W.ENOTCAPABLE):
+            fcntl.fcntl(self.pipeReadFD, fcntl.F_SETFL, flags)
+
+        fcntl.fcntl(self.pipeReadFD, fcntl.F_GETOWN)
+
+        with self.assertRaisesWithErrno(IOError, W.ENOTCAPABLE):
+            fcntl.fcntl(self.pipeReadFD, fcntl.F_SETOWN, os.getpid())
+
+        with self.assertRaisesWithErrno(W.SpyceError, errno.EBADF):
+            W.cap_fcntls_limit(-1, W.lib.CAP_FCNTL_GETFL)
+
+
+class TestIoctlLimits(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
+
+    def test_FIOCLEX(self):
+
+        def isCloexec(fd):
+            return fcntl.fcntl(fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
+
+        self.assertFalse(isCloexec(self.pipeReadFD))
+        self.assertFalse(fcntl.ioctl(self.pipeReadFD, W.lib.FIOCLEX))
+        self.assertTrue(isCloexec(self.pipeReadFD))
+
+    def test_cap_ioctls_get_all(self):
+        tenZeros = [0] * 10
+        for fd in (self.f.fileno(), self.pipeReadFD, self.pipeWriteFD):
+            ioctlRights = W.new_ioctl_rights(*tenZeros)
+            self.assertEqual(W.cap_ioctls_get(fd, ioctlRights),
+                             W.lib.CAP_IOCTLS_ALL)
+            self.assertFalse(any(ioctlRights))
+
+        with self.assertRaisesWithErrno(W.SpyceError, errno.EBADF):
+            W.cap_ioctls_get(-1, W.new_ioctl_rights())
+
+    def test_cap_ioctls_set_and_get(self):
+        ioctlRights = W.new_ioctl_rights(W.lib.FIOCLEX)
+        W.cap_ioctls_limit(self.pipeReadFD, ioctlRights)
+
+        checkNumOfRights = W.cap_ioctls_get(self.pipeReadFD,
+                                            W.new_ioctl_rights())
+
+        self.assertEqual(checkNumOfRights, 1)
+
+        fcntl.ioctl(self.pipeReadFD, W.lib.FIOCLEX)
+
+        W.cap_ioctls_limit(self.pipeWriteFD, W.new_ioctl_rights())
+
+        with self.assertRaisesWithErrno(IOError, W.ENOTCAPABLE):
+            fcntl.ioctl(self.pipeWriteFD, W.lib.FIOCLEX)
+
+        with self.assertRaisesWithErrno(W.SpyceError, W.ENOTCAPABLE):
+            W.cap_ioctls_limit(self.pipeWriteFD, ioctlRights)
+
+
+class TestLimitAndGetFD(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
     def test_cap_rights_limit_and_get(self):
         self.f.write("foobar")
@@ -171,32 +255,39 @@ class TestLimitAndGetd(ErrnoMixin, unittest.TestCase):
 
         self.assertEquals(self.f.read(), 'foobar')
 
-        with self.assertRaises(IOError) as caught_ioe:
+        with self.assertRaisesWithErrno(IOError, W.ENOTCAPABLE):
             self.f.write('fails')
             self.f.flush()
 
-        self.assertTrue(caught_ioe.exception.errno, 93)
+        fdRights = W.new_cap_rights()
+        W.cap_rights_get(self.f.fileno(), fdRights)
 
-        fd_rights = W.new_cap_rights()
-        W.cap_rights_get(self.f.fileno(), fd_rights)
-
-        self.assertTrue(W.cap_rights_contains(rights, fd_rights))
-        self.assertTrue(W.cap_rights_contains(fd_rights, rights))
+        self.assertTrue(W.cap_rights_contains(rights, fdRights))
+        self.assertTrue(W.cap_rights_contains(fdRights, rights))
 
     def test_cap_rights_limit_fails(self):
-        good_rights = W.cap_rights_init(W.new_cap_rights())
+        goodRights = W.cap_rights_init(W.new_cap_rights())
 
-        args_errnos = [((self.f.fileno(), W.new_cap_rights()), errno.EINVAL),
-                       ((-1, good_rights), errno.EBADF)]
+        with self.assertRaisesWithErrno(W.SpyceError, errno.EINVAL):
+            W.cap_rights_limit(self.f.fileno(), W.new_cap_rights())
 
-        self._test_errno(args_errnos, W.cap_rights_limit)
+        with self.assertRaisesWithErrno(W.SpyceError, errno.EBADF):
+            W.cap_rights_limit(-1, goodRights)
+
+        # can't increase the rights on a file
+        W.cap_rights_limit(self.f.fileno(), goodRights)
+
+        W.cap_rights_set(goodRights, W.lib.CAP_WRITE)
+
+        with self.assertRaisesWithErrno(W.SpyceError, W.ENOTCAPABLE):
+            W.cap_rights_limit(self.f.fileno(), goodRights)
 
     def test_cap_rights_get_fails(self):
-        good_rights = W.cap_rights_init(W.new_cap_rights())
+        goodRights = W.cap_rights_init(W.new_cap_rights())
 
-        args_errnos = [((self.f.fileno(), W.ffi.cast('cap_rights_t *',
-                                                     W.ffi.NULL)),
-                        errno.EFAULT),
-                       ((-1, good_rights), errno.EBADF)]
+        with self.assertRaisesWithErrno(W.SpyceError, errno.EFAULT):
+            W.cap_rights_get(self.f.fileno(),
+                             W.ffi.cast('cap_rights_t *', W.ffi.NULL))
 
-        self._test_errno(args_errnos, W.cap_rights_get)
+        with self.assertRaisesWithErrno(W.SpyceError, errno.EBADF):
+            W.cap_rights_get(-1, goodRights)
