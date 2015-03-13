@@ -7,7 +7,11 @@ from ._wrapper import (lib,
                        cap_rights_merge, cap_rights_remove,
                        cap_rights_contains, cap_rights_is_valid,
                        cap_rights_limit,
-                       SpyceError)
+                       SpyceError,
+                       ENOTCAPABLE,
+                       ECAPMODE,
+                       ENOTRECOVERABLE,
+                       EOWNERDEAD)
 
 
 class Right(namedtuple('Right', 'name value')):
@@ -124,7 +128,6 @@ def fdFor(thing):
     elif callable(getattr(thing, 'fileno', None)):
         return thing.fileno()
     raise SpyceError("{!r} lacks a fileno", thing)
-
 
 
 def _ensureValid(cap_rights):

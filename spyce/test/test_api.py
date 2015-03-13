@@ -3,8 +3,9 @@ import StringIO
 import tempfile
 import socket
 
-import spyce._wrapper as W
 import spyce._api as A
+
+from .support import ErrnoMixin, TemporaryFDMixin
 
 
 def normalizeRights(rights):
@@ -56,9 +57,10 @@ class TestRight(unittest.TestCase):
             iter(self.right)
 
 
-class TestRights(unittest.TestCase):
+class TestRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
     def setUp(self):
+        super(TestRights, self).setUp()
         self.rights = A.Rights([A.CAP_READ])
 
     def test_repr(self):
@@ -156,55 +158,40 @@ class TestRights(unittest.TestCase):
         self.assertFalse(self.rights.isdisjoint(A.Rights([A.CAP_READ,
                                                           A.CAP_WRITE])))
 
-    def verifyErrno(self, cm, err=W.ENOTCAPABLE):
-        the_exception = cm.exception
-        self.assertEquals(the_exception.errno, err)
-
     def test_limitTempFile(self):
         data = 'ok'
 
         # TODO: this is a synonym of CAP_READ.  handle this!
         self.rights.add(A.CAP_RECV)
 
-        with tempfile.TemporaryFile(mode='w+') as f:
-            f.write(data)
-            f.seek(0)
+        self.f.write(data)
+        self.f.seek(0)
 
-            self.rights.limitFile(f)
+        self.rights.limitFile(self.f)
 
-            self.assertEqual(f.read(), data)
+        self.assertEqual(self.f.read(), data)
 
-            with self.assertRaises(IOError) as cm:
-                f.write('this fails')
-                f.flush()
-            self.verifyErrno(cm)
+        with self.assertRaisesWithErrno(IOError, A.ENOTCAPABLE):
+            self.f.write('this fails')
+            self.f.flush()
 
-            self.assertEquals(self.rights, A.getFileRights(f))
+        self.assertEquals(self.rights, A.getFileRights(self.f))
 
     def test_limitSocketPair(self):
         data = 'ok'
 
-        a, b = socket.socketpair()
-
         sendRights = A.Rights([A.CAP_SEND])
         recvRights = A.Rights([A.CAP_RECV])
 
-        try:
-            sendRights.limitFile(a)
-            recvRights.limitFile(b)
+        sendRights.limitFile(self.socketSideA)
+        recvRights.limitFile(self.socketSideB)
 
-            # cross your fingers
-            with self.assertRaises(socket.error) as cm:
-                b.sendall(data)
-            self.verifyErrno(cm)
+        # cross your fingers
+        with self.assertRaisesWithErrno(socket.error, A.ENOTCAPABLE):
+            self.socketSideB.sendall(data)
 
-            with self.assertRaises(socket.error) as cm:
-                a.recv(1024)
-            self.verifyErrno(cm)
+        with self.assertRaisesWithErrno(socket.error, A.ENOTCAPABLE):
+            self.socketSideA.recv(1024)
 
-            a.sendall(data)
-            self.assertEqual(data, b.recv(len(data)))
-
-        finally:
-            a.close()
-            b.close()
+        self.socketSideA.sendall(data)
+        self.assertEqual(data, self.socketSideB.recv(len(data)))

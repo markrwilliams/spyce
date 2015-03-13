@@ -1,12 +1,12 @@
-import contextlib
 import os
 import errno
-import tempfile
 import unittest
 import operator
 import fcntl
 
 from spyce import _wrapper as W
+
+from .support import ErrnoMixin, TemporaryFDMixin
 
 
 NAMES = {W.lib.CAP_WRITE: 'CAP_WRITE',
@@ -31,16 +31,6 @@ class CapEnterTest(unittest.TestCase):
         self.assertTrue(W.cap_getmode(), "cap_getmode failed")
 
         os._exit(0)
-
-
-class ErrnoMixin(unittest.TestCase):
-
-    @contextlib.contextmanager
-    def assertRaisesWithErrno(self, exc, errno):
-        with self.assertRaises(exc) as caught_ce:
-            yield
-
-        self.assertTrue(caught_ce.exception.errno, errno)
 
 
 class SimpleRightsTests(ErrnoMixin, unittest.TestCase):
@@ -144,24 +134,6 @@ class SimpleRightsTests(ErrnoMixin, unittest.TestCase):
 
         self.assertTrue(W.cap_rights_contains(big, little))
         self.assertFalse(W.cap_rights_contains(little, big))
-
-
-class TemporaryFDMixin(unittest.TestCase):
-
-    def setUp(self):
-        cn = self.__class__.__name__
-        self.f = tempfile.TemporaryFile('w+',
-                                        prefix="spyce_test_{}_tmp".format(cn))
-        self.pipeReadFD, self.pipeWriteFD = self.pipeFDs = os.pipe()
-
-    def tearDown(self):
-        self.f.close()
-        for fd in self.pipeFDs:
-            try:
-                os.close(fd)
-            except OSError as e:
-                if e.errno != errno.EBADF:
-                    raise
 
 
 class TestFcntlLimits(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
