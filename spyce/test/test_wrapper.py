@@ -6,6 +6,7 @@ import fcntl
 import termios
 
 from spyce import _wrapper as W
+from spyce._compat import reduce
 
 from .support import ErrnoMixin, TemporaryFDMixin
 
@@ -209,7 +210,7 @@ class TestIoctlLimits(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 class TestLimitAndGetFD(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
     def test_cap_rights_limit_and_get(self):
-        self.f.write("foobar")
+        self.f.write(b'foobar')
         self.f.flush()
         self.f.seek(0)
 
@@ -217,10 +218,10 @@ class TestLimitAndGetFD(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
         W.cap_rights_limit(self.f.fileno(), rights)
 
-        self.assertEquals(self.f.read(), 'foobar')
+        self.assertEqual(self.f.read(), b'foobar')
 
         with self.assertRaisesWithErrno(IOError, W.ENOTCAPABLE):
-            self.f.write('fails')
+            self.f.write(b'fails')
             self.f.flush()
 
         fdRights = W.new_cap_rights()

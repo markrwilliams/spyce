@@ -17,7 +17,7 @@ from ._wrapper import (lib,
                        ECAPMODE,
                        ENOTRECOVERABLE,
                        EOWNERDEAD)
-from ._compat import reduce
+from ._compat import reduce, long
 
 
 class Right(namedtuple('Right', 'name value')):
@@ -125,8 +125,35 @@ CAP_WRITE = _add_right(Right('CAP_WRITE', lib.CAP_WRITE))
 RIGHTS = frozenset(RIGHTS)
 
 
-__all__ = ['Right', 'Rights', 'getFileRights', 'inCapabilityMode',
-           'enterCapabilityMode'] + [r.name for r in RIGHTS]
+class FcntlRight(Right):
+    pass
+
+
+FCNTL_RIGHTS = set()
+
+CAP_FCNTL_GETFL = _add_right(FcntlRight('CAP_FCNTL_GETFL',
+                                        lib.CAP_FCNTL_GETFL),
+                             FCNTL_RIGHTS)
+CAP_FCNTL_SETFL = _add_right(FcntlRight('CAP_FCNTL_SETFL',
+                                        lib.CAP_FCNTL_SETFL),
+                             FCNTL_RIGHTS)
+CAP_FCNTL_GETOWN = _add_right(FcntlRight('CAP_FCNTL_GETOWN',
+                                         lib.CAP_FCNTL_GETOWN),
+                              FCNTL_RIGHTS)
+CAP_FCNTL_SETOWN = _add_right(FcntlRight('CAP_FCNTL_SETOWN',
+                                         lib.CAP_FCNTL_SETOWN),
+                              FCNTL_RIGHTS)
+
+
+FCNTL_RIGHTS = frozenset(FCNTL_RIGHTS)
+
+
+__all__ = (['Right',
+            'Rights', 'FcntlRights', 'IoctlRights',
+            'getFileRights', 'getFileFcntlRights', 'getFileIoctlRights',
+            'inCapabilityMode', 'enterCapabilityMode']
+           + [r.name for r in RIGHTS]
+           + [r.name for r in FCNTL_RIGHTS])
 
 
 def fdFor(thing):
@@ -266,29 +293,6 @@ class Rights(SimpleRights):
         cap_rights_limit(fdFor(fileobj), self._cap_rights)
 
 
-class FcntlRight(Right):
-    pass
-
-
-FCNTL_RIGHTS = set()
-
-CAP_FCNTL_GETFL = _add_right(FcntlRight('CAP_FCNTL_GETFL',
-                                        lib.CAP_FCNTL_GETFL),
-                             FCNTL_RIGHTS)
-CAP_FCNTL_SETFL = _add_right(FcntlRight('CAP_FCNTL_SETFL',
-                                        lib.CAP_FCNTL_SETFL),
-                             FCNTL_RIGHTS)
-CAP_FCNTL_GETOWN = _add_right(FcntlRight('CAP_FCNTL_GETOWN',
-                                         lib.CAP_FCNTL_GETOWN),
-                              FCNTL_RIGHTS)
-CAP_FCNTL_SETOWN = _add_right(FcntlRight('CAP_FCNTL_SETOWN',
-                                         lib.CAP_FCNTL_SETOWN),
-                              FCNTL_RIGHTS)
-
-
-FCNTL_RIGHTS = frozenset(FCNTL_RIGHTS)
-
-
 class FcntlRights(SimpleRights):
 
     def __init__(self, iterable):
@@ -332,13 +336,13 @@ class IoctlRights(SimpleRights):
         self._rights = rights
 
     def add(self, right):
-        if not isinstance(right, int):
+        if not isinstance(right, (int, long)):
             raise SpyceError('Invalid ioctl {!r}'.format(right))
         self.allIoctls = False
         self._rights.add(right)
 
     def discard(self, right):
-        if not isinstance(right, int):
+        if not isinstance(right, (int, long)):
             raise SpyceError('Invalid ioctl {!r}'.format(right))
         self._rights.discard(right)
 

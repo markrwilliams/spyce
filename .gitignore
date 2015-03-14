@@ -6,8 +6,9 @@ htmlcov/
 *.so
 .tox/
 .cache/
-.coverage
+.coverage*
 *.egg-info/
 *.egg
 .eggs/
 *.py[co]
+.tox

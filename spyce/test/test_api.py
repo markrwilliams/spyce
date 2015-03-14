@@ -1,6 +1,5 @@
 import array
 import unittest
-import StringIO
 import tempfile
 import socket
 import fcntl
@@ -37,7 +36,7 @@ class TestInternalFunctions(unittest.TestCase):
         with tempfile.TemporaryFile() as f:
             self.assertEqual(A.fdFor(f), f.fileno())
 
-        no_fileno = StringIO.StringIO("nope!")
+        no_fileno = "nope!"
 
         with self.assertRaises(A.SpyceError):
             A.fdFor(no_fileno)
@@ -166,12 +165,13 @@ class TestRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
                                                           A.CAP_WRITE])))
 
     def test_limitTempFile(self):
-        data = 'ok'
+        data = b'ok'
 
         # TODO: this is a synonym of CAP_READ.  handle this!
         self.rights.add(A.CAP_RECV)
 
         self.f.write(data)
+        self.f.flush()
         self.f.seek(0)
 
         self.rights.limitFile(self.f)
@@ -179,17 +179,17 @@ class TestRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
         self.assertEqual(self.f.read(), data)
 
         with self.assertRaisesWithErrno(IOError, A.ENOTCAPABLE):
-            self.f.write('this fails')
+            self.f.write(b'this fails')
             self.f.flush()
 
-        self.assertEquals(self.rights, A.getFileRights(self.f))
+        self.assertEqual(self.rights, A.getFileRights(self.f))
 
         self.rights.add(A.CAP_WRITE)
         with self.assertRaisesWithErrno(A.SpyceError, A.ENOTCAPABLE):
             self.rights.limitFile(self.f)
 
     def test_limitSocketPair(self):
-        data = 'ok'
+        data = b'ok'
 
         sendRights = A.Rights([A.CAP_SEND])
         recvRights = A.Rights([A.CAP_RECV])
