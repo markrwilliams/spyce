@@ -352,6 +352,7 @@ class IoctlRights(SimpleRights):
             buf = new_ioctl_rights(*toApply)
             cap_ioctls_limit(fd, buf)
 
+
 def getFileRights(fileobj):
     fd = fdFor(fileobj)
     cap_rights = new_cap_rights()
