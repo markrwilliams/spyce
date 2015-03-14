@@ -1,8 +1,10 @@
+import array
 import unittest
 import StringIO
 import tempfile
 import socket
 import fcntl
+import termios
 
 import spyce._api as A
 
@@ -264,3 +266,81 @@ class TestFcntlRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
         self.fcntlRights.add(A.CAP_FCNTL_SETFL)
         with self.assertRaisesWithErrno(A.SpyceError, A.ENOTCAPABLE):
             self.fcntlRights.limitFile(self.f)
+
+
+class TestIoctlRights(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
+
+    def setUp(self):
+        super(TestIoctlRights, self).setUp()
+        self.ioctlRights = A.IoctlRights([termios.FIOCLEX])
+
+    def test_allIoctls(self):
+        self.assertFalse(self.ioctlRights.allIoctls)
+
+        ioctlRights = A.IoctlRights([A.CAP_IOCTLS_ALL])
+        self.assertTrue(ioctlRights.allIoctls)
+
+        ioctlRights.add(termios.FIOCLEX)
+        self.assertFalse(ioctlRights.allIoctls)
+
+    def test_init_with_bad_fcntl_rights(self):
+        with self.assertRaises(A.SpyceError):
+            A.IoctlRights([None])
+
+    def test_add(self):
+        self.ioctlRights.add(termios.FIONREAD)
+        self.assertEqual(self.ioctlRights, {termios.FIOCLEX,
+                                            termios.FIONREAD})
+
+        lenBefore = len(self.ioctlRights)
+
+        with self.assertRaises(A.SpyceError):
+            self.ioctlRights.add(None)
+
+        self.assertNotIn(None, self.ioctlRights)
+        self.assertEqual(lenBefore, len(self.ioctlRights))
+
+    def test_discard(self):
+        self.ioctlRights.add(termios.FIONREAD)
+        self.ioctlRights.discard(termios.FIOCLEX)
+        self.assertEqual(self.ioctlRights, {termios.FIONREAD})
+
+        lenBefore = len(self.ioctlRights)
+
+        with self.assertRaises(A.SpyceError):
+            self.ioctlRights.discard(None)
+
+        self.assertEqual(lenBefore, len(self.ioctlRights))
+
+    def test_contains(self):
+        self.assertIn(termios.FIOCLEX, self.ioctlRights)
+        self.assertNotIn(termios.FIONREAD, self.ioctlRights)
+
+    def test_len(self):
+        self.assertEqual(len(self.ioctlRights), 1)
+        self.ioctlRights.add(termios.FIOASYNC)
+        self.assertEqual(len(self.ioctlRights), 2)
+
+    def test_iter(self):
+        self.assertEqual(list(self.ioctlRights), [termios.FIOCLEX])
+
+    def test_limitFile_all_ioctls(self):
+        ioctlRights = A.getFileIoctlRights(self.pipeReadFD)
+        self.assertTrue(ioctlRights.allIoctls)
+
+        ioctlRights.limitFile(self.pipeReadFD)
+
+        self.assertTrue(A.getFileIoctlRights(self.pipeReadFD).allIoctls)
+
+    def test_limitFile(self):
+        self.ioctlRights.limitFile(self.f)
+
+        with self.assertRaisesWithErrno(IOError, A.ENOTCAPABLE):
+            buf = array.array('I', [0])
+            fcntl.ioctl(self.f, termios.FIONREAD, buf, 1)
+
+        self.assertEqual(A.getFileIoctlRights(self.f), self.ioctlRights)
+
+        self.ioctlRights.add(termios.FIONREAD)
+        with self.assertRaisesWithErrno(A.SpyceError, A.ENOTCAPABLE):
+            self.ioctlRights.limitFile(self.f)

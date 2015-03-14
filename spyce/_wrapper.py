@@ -149,7 +149,6 @@ int
 cap_fcntls_limit(int fd, uint32_t fcntlights);
 
 static const long CAP_IOCTLS_ALL;
-static const long FIOCLEX;
 
 int
 cap_ioctls_limit(int fd, const unsigned long *cmds, size_t cmds);
@@ -162,7 +161,6 @@ lib = ffi.verify('''
 #include <sys/types.h>
 #include <sys/errno.h>
 #include <sys/capability.h>
-#include <sys/ioctl.h>
 
 static const int _M_ENOTCAPABLE = ENOTCAPABLE;
 static const int _M_ECAPMODE = ECAPMODE;
@@ -172,6 +170,9 @@ static const int _M_EOWNERDEAD = EOWNERDEAD;
 static const int _M_CAP_RIGHTS_VERSION = CAP_RIGHTS_VERSION;
 
 ''', ext_package='spyce')
+
+
+CAP_IOCTLS_ALL = lib.CAP_IOCTLS_ALL
 
 ENOTCAPABLE = lib._M_ENOTCAPABLE
 ECAPMODE = lib._M_ECAPMODE

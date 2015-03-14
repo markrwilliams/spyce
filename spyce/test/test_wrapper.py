@@ -3,6 +3,7 @@ import errno
 import unittest
 import operator
 import fcntl
+import termios
 
 from spyce import _wrapper as W
 
@@ -174,28 +175,19 @@ class TestFcntlLimits(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
 class TestIoctlLimits(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
-    def test_FIOCLEX(self):
-
-        def isCloexec(fd):
-            return fcntl.fcntl(fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
-
-        self.assertFalse(isCloexec(self.pipeReadFD))
-        self.assertFalse(fcntl.ioctl(self.pipeReadFD, W.lib.FIOCLEX))
-        self.assertTrue(isCloexec(self.pipeReadFD))
-
     def test_cap_ioctls_get_all(self):
         tenZeros = [0] * 10
         for fd in (self.f.fileno(), self.pipeReadFD, self.pipeWriteFD):
             ioctlRights = W.new_ioctl_rights(*tenZeros)
             self.assertEqual(W.cap_ioctls_get(fd, ioctlRights),
-                             W.lib.CAP_IOCTLS_ALL)
+                             W.CAP_IOCTLS_ALL)
             self.assertFalse(any(ioctlRights))
 
         with self.assertRaisesWithErrno(W.SpyceError, errno.EBADF):
             W.cap_ioctls_get(-1, W.new_ioctl_rights())
 
     def test_cap_ioctls_set_and_get(self):
-        ioctlRights = W.new_ioctl_rights(W.lib.FIOCLEX)
+        ioctlRights = W.new_ioctl_rights(termios.FIOCLEX)
         W.cap_ioctls_limit(self.pipeReadFD, ioctlRights)
 
         checkNumOfRights = W.cap_ioctls_get(self.pipeReadFD,
@@ -203,12 +195,12 @@ class TestIoctlLimits(ErrnoMixin, TemporaryFDMixin, unittest.TestCase):
 
         self.assertEqual(checkNumOfRights, 1)
 
-        fcntl.ioctl(self.pipeReadFD, W.lib.FIOCLEX)
+        fcntl.ioctl(self.pipeReadFD, termios.FIOCLEX)
 
         W.cap_ioctls_limit(self.pipeWriteFD, W.new_ioctl_rights())
 
         with self.assertRaisesWithErrno(IOError, W.ENOTCAPABLE):
-            fcntl.ioctl(self.pipeWriteFD, W.lib.FIOCLEX)
+            fcntl.ioctl(self.pipeWriteFD, termios.FIOCLEX)
 
         with self.assertRaisesWithErrno(W.SpyceError, W.ENOTCAPABLE):
             W.cap_ioctls_limit(self.pipeWriteFD, ioctlRights)

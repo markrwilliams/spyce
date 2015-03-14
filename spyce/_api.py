@@ -9,7 +9,10 @@ from ._wrapper import (lib,
                        cap_rights_contains, cap_rights_is_valid,
                        cap_rights_limit,
                        cap_fcntls_get, cap_fcntls_limit,
+                       new_ioctl_rights, cap_ioctls_get, cap_ioctls_limit,
                        SpyceError,
+                       CAP_IOCTLS_ALL,
+                       MAX_IOCTL_CMDS,
                        ENOTCAPABLE,
                        ECAPMODE,
                        ENOTRECOVERABLE,
@@ -148,7 +151,24 @@ def _rightsFromCapRights(cap_rights):
 _NO_CAP_RIGHTS = object()
 
 
-class Rights(MutableSet):
+class SimpleRights(MutableSet):
+
+    def __iter__(self):
+        return iter(self._rights)
+
+    def __contains__(self, value):
+        return value in self._rights
+
+    def __len__(self):
+        return len(self._rights)
+
+    def __repr__(self):
+        cn = self.__class__.__name__
+        rights = ', '.join('{!r}'.format(r) for r in self._rights)
+        return '{}([{}])'.format(cn, rights)
+
+
+class Rights(SimpleRights):
     _rights = frozenset()
     _cap_rights = None
 
@@ -215,12 +235,6 @@ class Rights(MutableSet):
         self._rights -= other._rights
         return self
 
-    def __iter__(self):
-        return iter(self._rights)
-
-    def __contains__(self, value):
-        return value in self._rights
-
     def isdisjoint(self, other):
         cls = self.__class__
         if not isinstance(other, cls):
@@ -233,9 +247,6 @@ class Rights(MutableSet):
         return (self._rights.isdisjoint(other)
                 and not cap_rights_contains(self._cap_rights,
                                             other._cap_rights))
-
-    def __len__(self):
-        return len(self._rights)
 
     def __le__(self, other):
         cls = self.__class__
@@ -250,11 +261,6 @@ class Rights(MutableSet):
             super(cls, self).__ge__(other)
 
         return self._rights >= getattr(other, '_rights', other)
-
-    def __repr__(self):
-        cn = self.__class__.__name__
-        rights = ', '.join('{!r}'.format(r) for r in self._rights)
-        return '{}([{}])'.format(cn, rights)
 
     def limitFile(self, fileobj):
         cap_rights_limit(fdFor(fileobj), self._cap_rights)
@@ -283,7 +289,7 @@ CAP_FCNTL_SETOWN = _add_right(FcntlRight('CAP_FCNTL_SETOWN',
 FCNTL_RIGHTS = frozenset(FCNTL_RIGHTS)
 
 
-class FcntlRights(MutableSet):
+class FcntlRights(SimpleRights):
 
     def __init__(self, iterable):
         rights = set(iterable)
@@ -307,20 +313,44 @@ class FcntlRights(MutableSet):
             raise SpyceError('Invalid fcntl right {!r}'.format(right))
         self._rights.discard(right)
 
-    def __contains__(self, value):
-        return value in self._rights
-
-    def __iter__(self):
-        return iter(self._rights)
-
-    def __len__(self):
-        return len(self._rights)
-
     def limitFile(self, fileobj):
         fd = fdFor(fileobj)
         rights = reduce(operator.or_, map(int, self._rights))
         cap_fcntls_limit(fd, rights)
 
+
+class IoctlRights(SimpleRights):
+    allIoctls = False
+
+    def __init__(self, iterable):
+        rights = set(iterable)
+        bad = {r for r in rights if not isinstance(r, (int, long))}
+        if bad:
+            raise SpyceError('Invald ioctls {!r}'.format(tuple(bad)))
+        if rights == {CAP_IOCTLS_ALL}:
+            self.allIoctls = True
+        self._rights = rights
+
+    def add(self, right):
+        if not isinstance(right, int):
+            raise SpyceError('Invalid ioctl {!r}'.format(right))
+        self.allIoctls = False
+        self._rights.add(right)
+
+    def discard(self, right):
+        if not isinstance(right, int):
+            raise SpyceError('Invalid ioctl {!r}'.format(right))
+        self._rights.discard(right)
+
+    def limitFile(self, fileobj):
+        if self.allIoctls:
+            return
+        fd = fdFor(fileobj)
+        rights = list(self._rights)
+        while rights:
+            toApply, rights = rights[:MAX_IOCTL_CMDS], rights[MAX_IOCTL_CMDS:]
+            buf = new_ioctl_rights(*toApply)
+            cap_ioctls_limit(fd, buf)
 
 def getFileRights(fileobj):
     fd = fdFor(fileobj)
@@ -333,6 +363,15 @@ def getFileFcntlRights(fileobj):
     fd = fdFor(fileobj)
     intRights = cap_fcntls_get(fd)
     return FcntlRights._from_intRights(intRights)
+
+
+def getFileIoctlRights(fileobj, upTo=MAX_IOCTL_CMDS):
+    buf = new_ioctl_rights(*[0] * upTo)
+    fd = fdFor(fileobj)
+    numIoctls = cap_ioctls_get(fd, buf)
+    if numIoctls == CAP_IOCTLS_ALL:
+        return IoctlRights([CAP_IOCTLS_ALL])
+    return IoctlRights(buf[0:numIoctls])
 
 
 def inCapabilityMode():
