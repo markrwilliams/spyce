@@ -137,10 +137,10 @@ cap_rights_limit(int fd, const cap_rights_t *rights);
 int
 cap_rights_get(int fd, cap_rights_t *rights);
 
-static const int CAP_FCNTL_GETFL;
-static const int CAP_FCNTL_SETFL;
-static const int CAP_FCNTL_GETOWN;
-static const int CAP_FCNTL_SETOWN;
+#define CAP_FCNTL_GETFL ...
+#define CAP_FCNTL_SETFL ...
+#define CAP_FCNTL_GETOWN ...
+#define CAP_FCNTL_SETOWN ...
 
 int
 cap_fcntls_get(int fd, uint32_t *fcntlrights);
@@ -148,7 +148,7 @@ cap_fcntls_get(int fd, uint32_t *fcntlrights);
 int
 cap_fcntls_limit(int fd, uint32_t fcntlights);
 
-static const long CAP_IOCTLS_ALL;
+#define CAP_IOCTLS_ALL ...
 
 int
 cap_ioctls_limit(int fd, const unsigned long *cmds, size_t cmds);
