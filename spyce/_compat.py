@@ -3,7 +3,7 @@ try:  # pragma: no cover
 except NameError:  # pragma: no cover
     from functools import reduce
 
-try:
+try:  # pragma: no cover
     long = long
-except NameError:
+except NameError:  # pragma: no cover
     long = int
