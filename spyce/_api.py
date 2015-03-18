@@ -10,6 +10,7 @@ from ._wrapper import (lib,
                        cap_rights_limit,
                        cap_fcntls_get, cap_fcntls_limit,
                        new_ioctl_rights, cap_ioctls_get, cap_ioctls_limit,
+                       extended_errorcode,
                        SpyceError,
                        CAP_IOCTLS_ALL,
                        MAX_IOCTL_CMDS,
@@ -151,7 +152,13 @@ FCNTL_RIGHTS = frozenset(FCNTL_RIGHTS)
 __all__ = (['Right',
             'Rights', 'FcntlRights', 'IoctlRights',
             'getFileRights', 'getFileFcntlRights', 'getFileIoctlRights',
-            'inCapabilityMode', 'enterCapabilityMode']
+            'inCapabilityMode', 'enterCapabilityMode',
+            'CAP_IOCTLS_ALL',
+            'ENOTRECOVERABLE',
+            'ECAPMODE',
+            'ENOTRECOVERABLE',
+            'EOWNERDEAD',
+            'extended_errorcode']
            + [r.name for r in RIGHTS]
            + [r.name for r in FCNTL_RIGHTS])
 
@@ -217,8 +224,6 @@ class BaseRights(MutableSet):
 
 
 class Rights(BaseRights):
-    _rights = frozenset()
-    _cap_rights = None
 
     def __init__(self, iterable):
         if iterable is _NO_CAP_RIGHTS:
