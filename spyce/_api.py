@@ -180,6 +180,15 @@ _NO_CAP_RIGHTS = object()
 
 class SimpleRights(MutableSet):
 
+    def __init__(self, rights):
+        self._rights = rights
+
+    def add(self, thing):
+        self._rights.add(thing)
+
+    def discard(self, thing):
+        self._rights.discard(thing)
+
     def __iter__(self):
         return iter(self._rights)
 
@@ -188,6 +197,18 @@ class SimpleRights(MutableSet):
 
     def __len__(self):
         return len(self._rights)
+
+    def __le__(self, other):
+        if not isinstance(other, SimpleRights):
+            super(SimpleRights, self).__le__(other)
+
+        return self._rights <= getattr(other, '_rights', other)
+
+    def __ge__(self, other):
+        if not isinstance(other, SimpleRights):
+            super(SimpleRights, self).__ge__(other)
+
+        return self._rights >= getattr(other, '_rights', other)
 
     def __repr__(self):
         cn = self.__class__.__name__
@@ -228,7 +249,7 @@ class Rights(SimpleRights):
 
         _ensureValid(self._cap_rights)
         cap_rights_set(self._cap_rights, int(right))
-        self._rights.add(right)
+        super(Rights, self).add(right)
 
     def discard(self, right):
         if right not in RIGHTS:
@@ -236,7 +257,7 @@ class Rights(SimpleRights):
 
         _ensureValid(self._cap_rights)
         cap_rights_clear(self._cap_rights, int(right))
-        self._rights.discard(right)
+        super(Rights, self).discard(right)
 
     def __ior__(self, other):
         cls = self.__class__
@@ -275,20 +296,6 @@ class Rights(SimpleRights):
                 and not cap_rights_contains(self._cap_rights,
                                             other._cap_rights))
 
-    def __le__(self, other):
-        cls = self.__class__
-        if not isinstance(other, cls):
-            super(cls, self).__le__(other)
-
-        return self._rights <= getattr(other, '_rights', other)
-
-    def __ge__(self, other):
-        cls = self.__class__
-        if not isinstance(other, cls):
-            super(cls, self).__ge__(other)
-
-        return self._rights >= getattr(other, '_rights', other)
-
     def limitFile(self, fileobj):
         cap_rights_limit(fdFor(fileobj), self._cap_rights)
 
@@ -310,12 +317,12 @@ class FcntlRights(SimpleRights):
     def add(self, right):
         if right not in FCNTL_RIGHTS:
             raise SpyceError('Invalid fcntl right {!r}'.format(right))
-        self._rights.add(right)
+        super(FcntlRights, self).add(right)
 
     def discard(self, right):
         if right not in FCNTL_RIGHTS:
             raise SpyceError('Invalid fcntl right {!r}'.format(right))
-        self._rights.discard(right)
+        super(FcntlRights, self).discard(right)
 
     def limitFile(self, fileobj):
         fd = fdFor(fileobj)
@@ -339,12 +346,12 @@ class IoctlRights(SimpleRights):
         if not isinstance(right, (int, long)):
             raise SpyceError('Invalid ioctl {!r}'.format(right))
         self.allIoctls = False
-        self._rights.add(right)
+        super(IoctlRights, self).add(right)
 
     def discard(self, right):
         if not isinstance(right, (int, long)):
             raise SpyceError('Invalid ioctl {!r}'.format(right))
-        self._rights.discard(right)
+        super(IoctlRights, self).discard(right)
 
     def limitFile(self, fileobj):
         if self.allIoctls:
