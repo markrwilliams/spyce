@@ -335,6 +335,9 @@ class FcntlRights(BaseRights):
         cap_fcntls_limit(fd, rights)
 
 
+ALL_IOCTLS = frozenset([CAP_IOCTLS_ALL])
+
+
 class IoctlRights(BaseRights):
     allIoctls = False
 
@@ -343,7 +346,7 @@ class IoctlRights(BaseRights):
         bad = {r for r in rights if not isinstance(r, (int, long))}
         if bad:
             raise SpyceError('Invald ioctls {!r}'.format(tuple(bad)))
-        if rights == {CAP_IOCTLS_ALL}:
+        if rights == ALL_IOCTLS:
             self.allIoctls = True
         self._rights = rights
 
@@ -387,7 +390,7 @@ def getFileIoctlRights(fileobj, upTo=MAX_IOCTL_CMDS):
     fd = fdFor(fileobj)
     numIoctls = cap_ioctls_get(fd, buf)
     if numIoctls == CAP_IOCTLS_ALL:
-        return IoctlRights([CAP_IOCTLS_ALL])
+        return IoctlRights(ALL_IOCTLS)
     return IoctlRights(buf[0:numIoctls])
 
 
