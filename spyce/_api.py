@@ -178,7 +178,7 @@ def _rightsFromCapRights(cap_rights):
 _NO_CAP_RIGHTS = object()
 
 
-class SimpleRights(MutableSet):
+class BaseRights(MutableSet):
 
     def __init__(self, rights):
         self._rights = rights
@@ -199,14 +199,14 @@ class SimpleRights(MutableSet):
         return len(self._rights)
 
     def __le__(self, other):
-        if not isinstance(other, SimpleRights):
-            super(SimpleRights, self).__le__(other)
+        if not isinstance(other, BaseRights):
+            super(BaseRights, self).__le__(other)
 
         return self._rights <= getattr(other, '_rights', other)
 
     def __ge__(self, other):
-        if not isinstance(other, SimpleRights):
-            super(SimpleRights, self).__ge__(other)
+        if not isinstance(other, BaseRights):
+            super(BaseRights, self).__ge__(other)
 
         return self._rights >= getattr(other, '_rights', other)
 
@@ -216,7 +216,7 @@ class SimpleRights(MutableSet):
         return '{}([{}])'.format(cn, rights)
 
 
-class Rights(SimpleRights):
+class Rights(BaseRights):
     _rights = frozenset()
     _cap_rights = None
 
@@ -300,7 +300,7 @@ class Rights(SimpleRights):
         cap_rights_limit(fdFor(fileobj), self._cap_rights)
 
 
-class FcntlRights(SimpleRights):
+class FcntlRights(BaseRights):
 
     def __init__(self, iterable):
         rights = set(iterable)
@@ -330,7 +330,7 @@ class FcntlRights(SimpleRights):
         cap_fcntls_limit(fd, rights)
 
 
-class IoctlRights(SimpleRights):
+class IoctlRights(BaseRights):
     allIoctls = False
 
     def __init__(self, iterable):
