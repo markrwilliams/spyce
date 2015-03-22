@@ -26,7 +26,7 @@ It uses [`cffi`](https://cffi.readthedocs.org/en/latest/), so it works with CPyt
         from spyce import FcntlRights, getFileFcntlRights, CAP_FCNTL_GETFL
         with open('somefile', 'rb') as f:
             originalFcntlRights = getFileFcntlRights(f)
-            assert CAP_FCNTL_GETFL in originalRights
+            assert CAP_FCNTL_GETFL in originalFcntlRights
             FcntlRights([CAP_FCNTL_GETFL]).limitFile(f)
             # do some stuff!
 ````
