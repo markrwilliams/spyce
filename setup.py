@@ -2,7 +2,7 @@
     Spyce
     ~~~~~~~
 
-    CFFI bindings for FreeBSD's Capsicum sandboxing framework.
+    Python CFFI bindings for FreeBSD's Capsicum sandboxing framework.
 
 
     :copyright: (c) 2015 by Mark Williams
