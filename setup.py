@@ -18,7 +18,6 @@ desc = "Python CFFI bindings for FreeBSD's Capsicum sandboxing framework."
 
 if __name__ == '__main__':
     from setuptools import setup, find_packages
-    from spyce._wrapper import ffi
 
     setup(name='spyce',
           description=desc,
@@ -27,8 +26,8 @@ if __name__ == '__main__':
           author_email=__contact__,
           zip_safe=False,
           packages=find_packages(),
-          setup_requires=['vcversioner'],
+          setup_requires=['vcversioner', 'cffi>=1.0.1'],
+          cffi_modules=['spyce/_binding_build.py:ffi'],
+          install_requires=['cffi>=1.0.1'],
           include_package_data=True,
-          vcversioner={},
-          ext_package='spyce',
-          ext_modules=[ffi.verifier.get_extension()])
+          vcversioner={})
